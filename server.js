@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import archiver from 'archiver';
 import { parseSpotifyUrl, runDownload } from './lib/download-core.js';
+import os from 'os';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -77,7 +78,7 @@ app.post('/api/download', (req, res) => {
 
   const randId = Math.random().toString(36).slice(2, 9);
   const jobId = `job-${Date.now()}-${randId}`;
-  const jobDir = path.join(process.cwd(), 'downloads', jobId);
+  const jobDir = path.join(os.tmpdir(), jobId);
 
   try {
     fs.mkdirSync(jobDir, { recursive: true });
