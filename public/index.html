@@ -1,0 +1,1302 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SoundGrab — Spotify & YouTube → MP3</title>
+  <meta name="description" content="Download Spotify and YouTube Music tracks, albums, and playlists as high-quality MP3 files with embedded metadata and cover art." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #08090d;
+      --bg-subtle: #0e1117;
+      --surface: rgba(18, 22, 32, 0.65);
+      --surface-solid: #121620;
+      --border: rgba(255, 255, 255, 0.06);
+      --border-hover: rgba(255, 255, 255, 0.12);
+      --text: #edf0f7;
+      --text-secondary: #9ba3b8;
+      --muted: #6b7280;
+      --accent: #1ed760;
+      --accent-glow: rgba(30, 215, 96, 0.35);
+      --accent-dim: #17a84b;
+      --danger: #ef4444;
+      --danger-glow: rgba(239, 68, 68, 0.3);
+      --warning: #f59e0b;
+      --radius: 16px;
+      --radius-sm: 10px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      min-height: 100vh;
+      font-family: 'Inter', -apple-system, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: clamp(1.5rem, 5vw, 3rem) clamp(1rem, 4vw, 1.5rem) 4rem;
+      overflow-x: hidden;
+      position: relative;
+    }
+
+    /* ── Animated Background ─────────────────── */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -40%;
+      left: -20%;
+      width: 140%;
+      height: 140%;
+      background:
+        radial-gradient(ellipse 600px 400px at 20% 10%, rgba(30, 215, 96, 0.08) 0%, transparent 60%),
+        radial-gradient(ellipse 500px 350px at 80% 20%, rgba(99, 102, 241, 0.06) 0%, transparent 60%),
+        radial-gradient(ellipse 400px 300px at 50% 80%, rgba(30, 215, 96, 0.04) 0%, transparent 60%);
+      animation: bgFloat 20s ease-in-out infinite alternate;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    @keyframes bgFloat {
+      0%   { transform: translate(0, 0) rotate(0deg); }
+      50%  { transform: translate(-30px, 20px) rotate(1deg); }
+      100% { transform: translate(20px, -10px) rotate(-1deg); }
+    }
+
+    /* ── Noise Texture Overlay ──── */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    main {
+      width: 100%;
+      max-width: 480px;
+      position: relative;
+      z-index: 1;
+      animation: fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Branding ──────────────────────── */
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, var(--accent) 0%, #15803d 100%);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      box-shadow: 0 4px 16px var(--accent-glow);
+      flex-shrink: 0;
+    }
+
+    h1 {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: clamp(1.5rem, 4.5vw, 1.85rem);
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      background: linear-gradient(135deg, var(--text) 0%, var(--text-secondary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .sub {
+      color: var(--text-secondary);
+      font-size: clamp(0.85rem, 2.5vw, 0.95rem);
+      line-height: 1.65;
+      margin-bottom: 1.75rem;
+      max-width: 420px;
+    }
+
+    .sub .highlight {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* ── Card Container ────────────────── */
+    .card {
+      background: var(--surface);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: clamp(1.25rem, 4vw, 1.5rem);
+      transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .card:hover {
+      border-color: var(--border-hover);
+    }
+
+    .card:focus-within {
+      border-color: rgba(30, 215, 96, 0.2);
+      box-shadow: 0 0 0 4px rgba(30, 215, 96, 0.06), 0 8px 32px rgba(0, 0, 0, 0.3);
+    }
+
+    /* ── Form Elements ─────────────────── */
+    .form-inner {
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+    }
+
+    label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    label .label-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .input-wrapper {
+      position: relative;
+    }
+
+    .input-icon {
+      position: absolute;
+      left: 0.85rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      font-size: 1rem;
+      pointer-events: none;
+      transition: color 0.2s;
+    }
+
+    input[type='url'] {
+      width: 100%;
+      padding: 0.8rem 0.95rem 0.8rem 2.5rem;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      background: var(--bg-subtle);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+    }
+
+    input[type='url']::placeholder {
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    input[type='url']:focus {
+      border-color: var(--accent-dim);
+      box-shadow: 0 0 0 3px rgba(30, 215, 96, 0.1);
+      background: rgba(14, 17, 23, 0.9);
+    }
+
+    input[type='url']:focus ~ .input-icon {
+      color: var(--accent);
+    }
+
+    /* ── Buttons ───────────────────────── */
+    .btn-group {
+      display: flex;
+      gap: 0.6rem;
+      margin-top: 0.15rem;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 0.85rem 1rem;
+      border: none;
+      border-radius: 999px;
+      font-family: 'Inter', sans-serif;
+      font-weight: 700;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dim) 100%);
+      color: #04210f;
+      box-shadow: 0 2px 12px var(--accent-glow);
+    }
+
+    .btn-primary::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .btn-primary:hover:not(:disabled)::after {
+      opacity: 1;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 20px var(--accent-glow);
+    }
+
+    .btn-primary:active:not(:disabled) {
+      transform: translateY(0);
+      box-shadow: 0 1px 8px var(--accent-glow);
+    }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    .btn-cancel {
+      background: transparent;
+      color: var(--danger);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      display: none;
+      flex: 0 0 auto;
+      padding: 0.85rem 1.25rem;
+    }
+
+    .btn-cancel:hover:not(:disabled) {
+      background: rgba(239, 68, 68, 0.08);
+      border-color: rgba(239, 68, 68, 0.5);
+      box-shadow: 0 0 16px var(--danger-glow);
+    }
+
+    .btn-cancel.show {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      animation: fadeIn 0.3s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.95); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+
+    /* ── Status Message ────────────────── */
+    .status {
+      margin-top: 1rem;
+      padding: 0.8rem 1rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.85rem;
+      display: none;
+      line-height: 1.5;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .status.show { display: flex; align-items: flex-start; gap: 0.5rem; }
+
+    .status-icon {
+      font-size: 1rem;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    .status.working {
+      background: rgba(30, 215, 96, 0.06);
+      border: 1px solid rgba(30, 215, 96, 0.15);
+      color: #86efac;
+    }
+
+    .status.err {
+      background: rgba(239, 68, 68, 0.06);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+    }
+
+    .status.cancelled {
+      background: rgba(245, 158, 11, 0.06);
+      border: 1px solid rgba(245, 158, 11, 0.2);
+      color: #fcd34d;
+    }
+
+    /* ── Progress Container ────────────── */
+    .progress-card {
+      display: none;
+      margin-top: 1rem;
+      background: var(--surface);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: clamp(1rem, 3.5vw, 1.25rem);
+      animation: slideDown 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .progress-card.show {
+      display: block;
+    }
+
+    @keyframes slideDown {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 600;
+      font-size: 0.88rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .progress-pct {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    /* ── Progress Bar ──────────────────── */
+    .progress-track {
+      background: rgba(255, 255, 255, 0.04);
+      height: 8px;
+      border-radius: 99px;
+      overflow: hidden;
+      margin-bottom: 1rem;
+      position: relative;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 99px;
+      background: linear-gradient(90deg, var(--accent-dim) 0%, var(--accent) 100%);
+      transition: width 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+      position: relative;
+    }
+
+    .progress-fill.active::after {
+      content: '';
+      position: absolute;
+      right: 0;
+      top: -3px;
+      width: 14px;
+      height: 14px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 12px var(--accent-glow);
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50%      { transform: scale(1.3); opacity: 0.6; }
+    }
+
+    /* ── Track Progress ────────────────── */
+    .track-progress {
+      display: none;
+      margin-bottom: 1rem;
+    }
+
+    .track-progress.show { display: block; }
+
+    .track-progress-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.78rem;
+      margin-bottom: 0.4rem;
+      color: var(--text-secondary);
+    }
+
+    .track-name {
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 78%;
+      font-weight: 500;
+    }
+
+    .track-progress-track {
+      background: rgba(255, 255, 255, 0.04);
+      height: 4px;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .track-progress-fill {
+      background: linear-gradient(90deg, var(--accent-dim), var(--accent));
+      height: 100%;
+      width: 0%;
+      border-radius: 99px;
+      transition: width 0.3s ease;
+    }
+
+    /* ── Log Area ──────────────────────── */
+    .log-area {
+      font-family: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+      font-size: 0.75rem;
+      line-height: 1.7;
+      color: var(--muted);
+      max-height: 160px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding-right: 0.4rem;
+    }
+
+    .log-area::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .log-area::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    .log-area::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.08);
+      border-radius: 99px;
+    }
+
+    .log-area > div {
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: background 0.15s;
+    }
+
+    .log-area > div:nth-child(even) {
+      background: rgba(255, 255, 255, 0.015);
+    }
+
+    .log-area > div:hover {
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    /* ── Footer / Note ─────────────────── */
+    .note {
+      margin-top: 1.75rem;
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.6;
+      text-align: center;
+    }
+
+    .note a {
+      color: var(--text-secondary);
+      text-decoration: underline;
+      text-decoration-color: rgba(255,255,255,0.15);
+      text-underline-offset: 2px;
+      transition: color 0.2s;
+    }
+
+    .note a:hover {
+      color: var(--accent);
+    }
+
+    /* ── Supported Badges ──────────────── */
+    .badges {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 1.1rem;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      padding: 0.3rem 0.7rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--text-secondary);
+      background: rgba(255, 255, 255, 0.02);
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .badge:hover {
+      border-color: var(--border-hover);
+      background: rgba(255, 255, 255, 0.04);
+    }
+
+    .badge-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    .badge-dot.green  { background: var(--accent); }
+    .badge-dot.red    { background: #ef4444; }
+    .badge-dot.purple { background: #8b5cf6; }
+
+    /* ── Mobile Responsive ─────────────── */
+    @media (max-width: 640px) {
+      main { max-width: 100%; }
+
+      .btn-group { flex-direction: column; }
+
+      .btn-cancel.show {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .progress-header {
+        font-size: 0.82rem;
+      }
+
+      .log-area {
+        max-height: 120px;
+        font-size: 0.7rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      body {
+        padding: 1.25rem 0.85rem 3rem;
+      }
+
+      .card {
+        border-radius: 14px;
+        padding: 1.1rem;
+      }
+
+      .brand-icon {
+        width: 38px;
+        height: 38px;
+        font-size: 1.2rem;
+        border-radius: 10px;
+      }
+
+      input[type='url'] {
+        font-size: 0.85rem;
+        padding: 0.75rem 0.85rem 0.75rem 2.2rem;
+      }
+
+      .badges { gap: 0.35rem; }
+
+      .badge { font-size: 0.65rem; padding: 0.25rem 0.55rem; }
+    }
+
+    /* ── Focus Visible ─────────────────── */
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    /* ── Selection ─────────────────────── */
+    ::selection {
+      background: rgba(30, 215, 96, 0.3);
+      color: #fff;
+    }
+
+    /* ═══════════════════════════════════════
+       INFO SECTIONS
+       ═══════════════════════════════════════ */
+    .info-sections {
+      margin-top: 2.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.1rem;
+    }
+
+    .info-card {
+      position: relative;
+      background: var(--surface);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem 1.4rem 1.3rem;
+      overflow: hidden;
+      transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
+      animation: fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    .info-card:hover {
+      border-color: var(--border-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+    }
+
+    /* Accent top bar */
+    .info-card-accent {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      border-radius: var(--radius) var(--radius) 0 0;
+    }
+
+    .about-accent   { background: linear-gradient(90deg, #1ed760, #059669); }
+    .features-accent { background: linear-gradient(90deg, #8b5cf6, #6366f1); }
+    .howto-accent    { background: linear-gradient(90deg, #3b82f6, #06b6d4); }
+    .limits-accent   { background: linear-gradient(90deg, #f59e0b, #ef4444); }
+    .best-accent     { background: linear-gradient(90deg, #fbbf24, #f97316, #ef4444); }
+
+    /* Section icon */
+    .info-icon-wrap {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      margin-bottom: 0.75rem;
+      flex-shrink: 0;
+    }
+
+    .about-icon-bg    { background: rgba(30, 215, 96, 0.12); }
+    .features-icon-bg { background: rgba(139, 92, 246, 0.12); }
+    .howto-icon-bg    { background: rgba(59, 130, 246, 0.12); }
+    .limits-icon-bg   { background: rgba(245, 158, 11, 0.12); }
+    .best-icon-bg     { background: rgba(251, 191, 36, 0.15); }
+
+    .info-title {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      margin-bottom: 0.6rem;
+    }
+
+    .info-text {
+      font-size: 0.88rem;
+      line-height: 1.7;
+      color: var(--text-secondary);
+    }
+
+    .info-text strong {
+      color: var(--text);
+    }
+
+    .hl-green { color: var(--accent); font-weight: 600; }
+    .hl-red   { color: #ef4444; font-weight: 600; }
+
+    /* ── Feature list ────── */
+    .feature-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.55rem;
+    }
+
+    .feature-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.55rem;
+      font-size: 0.85rem;
+      line-height: 1.6;
+      color: var(--text-secondary);
+      padding: 0.4rem 0.55rem;
+      border-radius: 8px;
+      transition: background 0.2s;
+    }
+
+    .feature-list li:hover {
+      background: rgba(255, 255, 255, 0.025);
+    }
+
+    .feature-list li strong {
+      color: var(--text);
+    }
+
+    .feat-icon {
+      font-size: 1rem;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    /* ── Steps list ────── */
+    .steps-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+      counter-reset: none;
+    }
+
+    .steps-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+
+    .step-number {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.15), rgba(6, 182, 212, 0.15));
+      border: 1px solid rgba(59, 130, 246, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #60a5fa;
+      flex-shrink: 0;
+    }
+
+    .step-content {
+      font-size: 0.85rem;
+      line-height: 1.65;
+      color: var(--text-secondary);
+      padding-top: 3px;
+    }
+
+    .step-content strong {
+      color: var(--text);
+    }
+
+    .step-content em {
+      color: var(--accent);
+      font-style: normal;
+      font-weight: 600;
+    }
+
+    /* ── Limits list ────── */
+    .limits-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.65rem;
+    }
+
+    .limits-list li {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+      padding: 0.5rem 0.6rem;
+      border-radius: 8px;
+      border-left: 2px solid rgba(245, 158, 11, 0.3);
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .limits-list li:hover {
+      background: rgba(255, 255, 255, 0.02);
+      border-left-color: rgba(245, 158, 11, 0.6);
+    }
+
+    .limit-label {
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #fbbf24;
+    }
+
+    .limit-value {
+      font-size: 0.82rem;
+      line-height: 1.6;
+      color: var(--text-secondary);
+    }
+
+    .limit-value em {
+      color: var(--text);
+      font-style: normal;
+      font-weight: 600;
+    }
+
+    /* ── Best feature card ────── */
+    .best-feature-card {
+      border-color: rgba(251, 191, 36, 0.12);
+    }
+
+    .best-feature-card:hover {
+      border-color: rgba(251, 191, 36, 0.25);
+      box-shadow: 0 8px 40px rgba(251, 191, 36, 0.08), 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
+
+    .best-feature-glow {
+      position: absolute;
+      top: -60%;
+      right: -30%;
+      width: 200px;
+      height: 200px;
+      background: radial-gradient(circle, rgba(251, 191, 36, 0.06) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .best-feature-highlight {
+      background: linear-gradient(135deg, rgba(251, 191, 36, 0.04), rgba(249, 115, 22, 0.04));
+      border: 1px solid rgba(251, 191, 36, 0.1);
+      border-radius: var(--radius-sm);
+      padding: 1rem 1.1rem;
+    }
+
+    .best-feature-tag {
+      display: inline-block;
+      font-size: 0.62rem;
+      font-weight: 800;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #fbbf24;
+      background: rgba(251, 191, 36, 0.12);
+      padding: 0.2rem 0.6rem;
+      border-radius: 999px;
+      margin-bottom: 0.5rem;
+    }
+
+    .best-feature-heading {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(135deg, #fbbf24 0%, #f97316 50%, #ef4444 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.5rem;
+    }
+
+    /* ── Info sections mobile ────── */
+    @media (max-width: 480px) {
+      .info-card {
+        padding: 1.25rem 1rem 1.1rem;
+        border-radius: 14px;
+      }
+
+      .info-title { font-size: 1rem; }
+
+      .feature-list li { font-size: 0.8rem; padding: 0.3rem 0.4rem; }
+
+      .step-number { width: 26px; height: 26px; font-size: 0.72rem; }
+
+      .step-content { font-size: 0.8rem; }
+
+      .limit-label { font-size: 0.72rem; }
+      .limit-value { font-size: 0.78rem; }
+
+      .best-feature-heading { font-size: 1.1rem; }
+    }
+  </style>
+</head>
+
+<body>
+  <main>
+    <!-- ── Branding ── -->
+    <div class="brand">
+      <div class="brand-icon">🎵</div>
+      <h1>SoundGrab</h1>
+    </div>
+    <p class="sub">
+      Paste a <span class="highlight">Spotify</span> or <span class="highlight">YouTube Music</span> link below.
+      Tracks are matched on YouTube and delivered as high-quality MP3s with embedded tags and cover art.
+    </p>
+
+    <!-- ── Form Card ── -->
+    <form id="form" class="card" autocomplete="off">
+      <div class="form-inner">
+        <label for="url">
+          <span class="label-dot"></span>
+          Paste URL
+        </label>
+        <div class="input-wrapper">
+          <span class="input-icon">🔗</span>
+          <input id="url" name="url" type="url"
+            placeholder="https://open.spotify.com/... or music.youtube.com/..."
+            required />
+        </div>
+        <div class="btn-group">
+          <button type="submit" id="btn" class="btn btn-primary">⬇ Download</button>
+          <button type="button" id="cancelBtn" class="btn btn-cancel" title="Cancel download">✕ Cancel</button>
+        </div>
+      </div>
+    </form>
+
+    <!-- ── Status ── -->
+    <div id="status" class="status" role="status">
+      <span class="status-icon"></span>
+      <span class="status-text"></span>
+    </div>
+
+    <!-- ── Progress ── -->
+    <div id="progressContainer" class="progress-card">
+      <div class="progress-header">
+        <span id="progressText">Preparing...</span>
+        <span id="progressPercent" class="progress-pct">0%</span>
+      </div>
+      <div class="progress-track">
+        <div id="progressBar" class="progress-fill active"></div>
+      </div>
+
+      <div id="trackProgressWrapper" class="track-progress">
+        <div class="track-progress-header">
+          <span id="trackProgressText" class="track-name">Current Track</span>
+          <span id="trackProgressPercent">0%</span>
+        </div>
+        <div class="track-progress-track">
+          <div id="trackProgressBar" class="track-progress-fill"></div>
+        </div>
+      </div>
+
+      <div id="logArea" class="log-area"></div>
+    </div>
+
+    <!-- ── Badges ── -->
+    <div class="badges">
+      <span class="badge"><span class="badge-dot green"></span> Spotify</span>
+      <span class="badge"><span class="badge-dot red"></span> YouTube Music</span>
+      <span class="badge"><span class="badge-dot purple"></span> Playlists & Albums</span>
+    </div>
+
+    <!-- ── Info Sections ── -->
+    <div class="info-sections">
+
+      <!-- 1. What's This About -->
+      <section class="info-card" id="about-section">
+        <div class="info-card-accent about-accent"></div>
+        <div class="info-icon-wrap about-icon-bg">🌐</div>
+        <h2 class="info-title">What is SoundGrab?</h2>
+        <p class="info-text">
+          SoundGrab is a <strong>free, browser-based music downloader</strong> that lets you save tracks, albums, and playlists from
+          <span class="hl-green">Spotify</span> and <span class="hl-red">YouTube Music</span> as <strong>high-quality 320 kbps MP3</strong> files — complete with
+          embedded metadata like artist, album name, track number, genre, and cover art. No app installs, no sign-ups — just paste a link and go.
+        </p>
+      </section>
+
+      <!-- 2. Features -->
+      <section class="info-card" id="features-section">
+        <div class="info-card-accent features-accent"></div>
+        <div class="info-icon-wrap features-icon-bg">⚡</div>
+        <h2 class="info-title">Features</h2>
+        <ul class="feature-list">
+          <li><span class="feat-icon">🎵</span> <strong>320 kbps MP3</strong> — Guaranteed constant bitrate for every download</li>
+          <li><span class="feat-icon">📀</span> <strong>Full Metadata</strong> — Artist, album, year, genre, track number & cover art embedded automatically</li>
+          <li><span class="feat-icon">📁</span> <strong>Batch Downloads</strong> — Entire playlists & albums downloaded in one click, delivered as a ZIP</li>
+          <li><span class="feat-icon">📊</span> <strong>Live Progress</strong> — Real-time progress bars for overall job and individual tracks</li>
+          <li><span class="feat-icon">🔗</span> <strong>Multi-Source</strong> — Supports Spotify tracks, albums, playlists + YouTube Music links</li>
+          <li><span class="feat-icon">❌</span> <strong>Cancel Anytime</strong> — Abort running downloads instantly with the cancel button</li>
+          <li><span class="feat-icon">📱</span> <strong>Mobile Friendly</strong> — Fully responsive design, works on any device</li>
+        </ul>
+      </section>
+
+      <!-- 3. How to Download -->
+      <section class="info-card" id="howto-section">
+        <div class="info-card-accent howto-accent"></div>
+        <div class="info-icon-wrap howto-icon-bg">📥</div>
+        <h2 class="info-title">How to Download</h2>
+        <ol class="steps-list">
+          <li>
+            <div class="step-number">1</div>
+            <div class="step-content">
+              <strong>Copy the link</strong> — Open Spotify or YouTube Music and copy the share URL of a track, album, or playlist.
+            </div>
+          </li>
+          <li>
+            <div class="step-number">2</div>
+            <div class="step-content">
+              <strong>Paste it here</strong> — Drop the URL into the input field above and hit <em>⬇ Download</em>.
+            </div>
+          </li>
+          <li>
+            <div class="step-number">3</div>
+            <div class="step-content">
+              <strong>Wait for it</strong> — Watch the real-time progress bar as SoundGrab fetches, converts, and tags every track.
+            </div>
+          </li>
+          <li>
+            <div class="step-number">4</div>
+            <div class="step-content">
+              <strong>Save to device</strong> — Your file (or ZIP for playlists) will download automatically when finished.
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <!-- 4. Limits -->
+      <section class="info-card" id="limits-section">
+        <div class="info-card-accent limits-accent"></div>
+        <div class="info-icon-wrap limits-icon-bg">⚠️</div>
+        <h2 class="info-title">Limits</h2>
+        <ul class="limits-list">
+          <li>
+            <span class="limit-label">Playlist size</span>
+            <span class="limit-value">Large playlists (100+ tracks) may take a while — SoundGrab downloads sequentially for stability</span>
+          </li>
+          <li>
+            <span class="limit-label">Private playlists</span>
+            <span class="limit-value">Only <em>public</em> Spotify playlists are supported; private ones require API scope that may be restricted</span>
+          </li>
+          <li>
+            <span class="limit-label">Audio source</span>
+            <span class="limit-value">Audio is matched &amp; sourced from YouTube — occasional mismatches may occur for very obscure tracks</span>
+          </li>
+          <li>
+            <span class="limit-label">One job at a time</span>
+            <span class="limit-value">Run one download per session for best performance — wait for current job to finish before starting another</span>
+          </li>
+          <li>
+            <span class="limit-label">Personal use</span>
+            <span class="limit-value">Intended for personal, offline listening only — respect copyright &amp; the artists you love</span>
+          </li>
+        </ul>
+      </section>
+
+      <!-- 5. Best Feature -->
+      <section class="info-card best-feature-card" id="best-feature-section">
+        <div class="info-card-accent best-accent"></div>
+        <div class="best-feature-glow"></div>
+        <div class="info-icon-wrap best-icon-bg">🏆</div>
+        <h2 class="info-title">Best Feature</h2>
+        <div class="best-feature-highlight">
+          <div class="best-feature-tag">GUARANTEED</div>
+          <h3 class="best-feature-heading">320 kbps MP3 Quality</h3>
+          <p class="info-text">
+            Every single song downloaded through SoundGrab is encoded at a <strong>constant 320 kbps bitrate</strong> — the highest quality MP3 standard.
+            Unlike variable bitrate encoders that fluctuate between 128–256 kbps, SoundGrab forces a <strong>true CBR 320 kbps</strong> encode on every file,
+            so you get studio-grade clarity for every track in your library. Combined with auto-embedded ID3 tags and album artwork, your downloads are
+            indistinguishable from premium music store purchases.
+          </p>
+        </div>
+      </section>
+
+    </div>
+
+    <p class="note">
+      Audio sourced from YouTube · Metadata from Spotify API · For personal use only
+    </p>
+  </main>
+
+  <script>
+    const form = document.getElementById('form');
+    const btn = document.getElementById('btn');
+    const cancelBtn = document.getElementById('cancelBtn');
+    const statusEl = document.getElementById('status');
+
+    let currentJobId = null;
+    let currentEventSource = null;
+
+    function showStatus(kind, text) {
+      const icon = statusEl.querySelector('.status-icon');
+      const txt = statusEl.querySelector('.status-text');
+      statusEl.className = 'status show ' + kind;
+      icon.textContent = kind === 'err' ? '⚠' : kind === 'cancelled' ? '⏹' : '✓';
+      txt.textContent = text;
+    }
+
+    function hideStatus() {
+      statusEl.className = 'status';
+    }
+
+    const progressContainer = document.getElementById('progressContainer');
+    const progressText = document.getElementById('progressText');
+    const progressPercent = document.getElementById('progressPercent');
+    const progressBar = document.getElementById('progressBar');
+
+    const trackProgressWrapper = document.getElementById('trackProgressWrapper');
+    const trackProgressText = document.getElementById('trackProgressText');
+    const trackProgressPercent = document.getElementById('trackProgressPercent');
+    const trackProgressBar = document.getElementById('trackProgressBar');
+
+    const logArea = document.getElementById('logArea');
+
+    function addLog(html) {
+      const div = document.createElement('div');
+      div.innerHTML = html;
+      logArea.appendChild(div);
+      logArea.scrollTop = logArea.scrollHeight;
+    }
+
+    function resetUI() {
+      btn.disabled = false;
+      cancelBtn.classList.remove('show');
+      currentJobId = null;
+      currentEventSource = null;
+      progressBar.classList.remove('active');
+    }
+
+    // ── Cancel Handler ──
+    cancelBtn.addEventListener('click', async () => {
+      if (!currentJobId) return;
+      cancelBtn.disabled = true;
+
+      try {
+        await fetch(`/api/download/${currentJobId}/cancel`, { method: 'POST' });
+      } catch (e) {
+        // If cancel API fails, still clean up the UI
+      }
+
+      if (currentEventSource) {
+        currentEventSource.close();
+        currentEventSource = null;
+      }
+
+      showStatus('cancelled', 'Download cancelled.');
+      progressText.textContent = 'Cancelled';
+      progressBar.classList.remove('active');
+      resetUI();
+    });
+
+    // ── Form Submit ──
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const url = document.getElementById('url').value.trim();
+      if (!url) return;
+
+      btn.disabled = true;
+      cancelBtn.classList.add('show');
+      cancelBtn.disabled = false;
+      hideStatus();
+
+      progressContainer.classList.add('show');
+      progressBar.style.width = '0%';
+      progressBar.classList.add('active');
+      progressPercent.textContent = '0%';
+      progressText.textContent = 'Starting job...';
+
+      trackProgressWrapper.classList.remove('show');
+      trackProgressBar.style.width = '0%';
+      trackProgressPercent.textContent = '0%';
+
+      logArea.innerHTML = '';
+
+      try {
+        const res = await fetch('/api/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+          credentials: 'include',
+        });
+
+        if (!res.ok) {
+          let msg = 'Request failed';
+          try {
+            const j = await res.json();
+            msg = j.error || msg;
+          } catch {
+            msg = res.statusText || msg;
+          }
+          showStatus('err', msg);
+          progressContainer.classList.remove('show');
+          resetUI();
+          return;
+        }
+
+        const { jobId } = await res.json();
+        currentJobId = jobId;
+
+        let eventSource = new EventSource(`/api/progress/${jobId}`);
+        currentEventSource = eventSource;
+
+        eventSource.onmessage = (ev) => {
+          const data = JSON.parse(ev.data);
+
+          if (data.type === 'start') {
+            progressText.textContent = `0 / ${data.total} tracks`;
+          } else if (data.type === 'startTrack' || data.type === 'endTrack') {
+            const trackNum = data.type === 'endTrack' ? data.index : data.index - 1;
+            const pct = data.total > 0 ? Math.round((trackNum / data.total) * 100) : 0;
+            progressBar.style.width = `${pct}%`;
+            progressPercent.textContent = `${pct}%`;
+            progressText.textContent = `${trackNum} / ${data.total} tracks`;
+
+            trackProgressWrapper.classList.add('show');
+            trackProgressText.textContent = `${data.artists} — ${data.current}`;
+
+            if (data.type === 'startTrack') {
+              trackProgressBar.style.width = '0%';
+              trackProgressPercent.textContent = '0%';
+              addLog(`<span style="color:var(--text)">[${data.index}/${data.total}] downloading:</span> ${data.artists} — ${data.current}`);
+            } else if (data.type === 'endTrack') {
+              trackProgressBar.style.width = '100%';
+              trackProgressPercent.textContent = '100%';
+              if (data.status === 'err') {
+                addLog(`<span style="color:var(--danger)">[${data.index}/${data.total}] failed:</span> ${data.error}`);
+              } else {
+                addLog(`<span style="color:var(--accent)">[${data.index}/${data.total}] ✓</span> ${data.current}`);
+              }
+            }
+          } else if (data.type === 'trackProgress') {
+            trackProgressWrapper.classList.add('show');
+            trackProgressText.textContent = `${data.artists} — ${data.current}`;
+            if (data.percent) {
+              trackProgressBar.style.width = `${data.percent}%`;
+              trackProgressPercent.textContent = `${data.percent}%`;
+            }
+          } else if (data.type === 'log') {
+            if (data.text.includes('Spotify Web API returned 403')) {
+              showStatus('err', 'Metadata warning: ' + data.text);
+            } else {
+              addLog(`<i>${data.text}</i>`);
+            }
+          } else if (data.type === 'cancelled') {
+            eventSource.close();
+            showStatus('cancelled', 'Download cancelled.');
+            progressText.textContent = 'Cancelled';
+            resetUI();
+          } else if (data.type === 'done') {
+            eventSource.close();
+            progressText.textContent = `Finished — ${data.ok} ok, ${data.fail} failed`;
+            progressBar.style.width = '100%';
+            progressBar.classList.remove('active');
+            progressPercent.textContent = '100%';
+
+            addLog(`<span style="color:var(--accent); font-weight:600;">✓ Download ready. Saving to device...</span>`);
+            resetUI();
+
+            const a = document.createElement('a');
+            a.href = data.resultUrl;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(() => document.body.removeChild(a), 1000);
+          } else if (data.type === 'error') {
+            eventSource.close();
+            progressText.textContent = 'Error';
+            showStatus('err', data.error);
+            resetUI();
+          }
+        };
+
+        eventSource.onerror = () => {
+          eventSource.close();
+          showStatus('err', 'Connection to server lost. The download may still be running in the background.');
+          resetUI();
+        };
+
+      } catch (err) {
+        showStatus('err', err.message || 'Network error');
+        progressContainer.classList.remove('show');
+        resetUI();
+      }
+    });
+  </script>
+</body>
+
+</html>

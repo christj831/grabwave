@@ -1,0 +1,28 @@
+{
+  "name": "spotifydownloader",
+  "version": "1.0.0",
+  "description": "Resolve Spotify links, find audio on YouTube, save as MP3",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "spotify-dl": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "download": "node index.js",
+    "web": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "dotenv": "^16.4.5",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "ffmpeg-static": "^5.2.0",
+    "node-id3": "^0.2.9",
+    "play-dl": "^1.9.7",
+    "yt-dlp-wrap": "^2.3.12"
+  }
+}
